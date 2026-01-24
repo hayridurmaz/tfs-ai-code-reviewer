@@ -17,7 +17,6 @@ async function processPR(repo, pr) {
         const iterationId = latestIteration.id;
 
         if (isIterationReviewed(repo.id, pr.pullRequestId, iterationId)) {
-            logger.info(`  ⏭️ PR #${pr.pullRequestId} - iteration ${iterationId} zaten incelendi, atlanıyor.`);
             return; // Zaten incelendi
         }
 
@@ -61,7 +60,27 @@ async function processRepo(repo) {
 
     try {
         // 2) Aktif PR'ları al
-        const prs = await getActivePullRequests(repo.id);
+        let prs = await getActivePullRequests(repo.id);
+
+        // Filtreleme: PR ID bazlı
+        if (config.ado.ignorePrIds.length > 0) {
+            const beforeCount = prs.length;
+            prs = prs.filter(pr => !config.ado.ignorePrIds.includes(pr.pullRequestId));
+            const diff = beforeCount - prs.length;
+            if (diff > 0) logger.info(`  🚫 ${diff} PR (ID bazlı) filtrelendi.`);
+        }
+
+        // Filtreleme: Branch bazlı
+        if (config.ado.targetBranches.length > 0) {
+            const beforeCount = prs.length;
+            prs = prs.filter(pr => {
+                // ADO targetRefName formatı: refs/heads/main
+                return config.ado.targetBranches.some(b => pr.targetRefName === b || pr.targetRefName === `refs/heads/${b}`);
+            });
+            const diff = beforeCount - prs.length;
+            if (diff > 0) logger.info(`  🚫 ${diff} PR (target branch bazlı) filtrelendi.`);
+        }
+
         logger.info(`  └─ ${repo.name}: ${prs.length} aktif PR bulundu`);
 
         // PR'ları paralel işle

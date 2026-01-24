@@ -6,7 +6,9 @@ export default {
         baseUrl: process.env.ADO_BASE_URL,
         pat: process.env.ADO_PAT,
         project: process.env.PROJECT_NAME,
-        repos: process.env.REPO_NAMES ? process.env.REPO_NAMES.split(',').map(r => r.trim()) : []
+        repos: process.env.REPO_NAMES ? process.env.REPO_NAMES.split(',').map(r => r.trim()) : [],
+        targetBranches: process.env.TARGET_BRANCHES ? process.env.TARGET_BRANCHES.split(',').map(b => b.trim()) : [],
+        ignorePrIds: process.env.IGNORE_PR_IDS ? process.env.IGNORE_PR_IDS.split(',').map(id => parseInt(id.trim())) : []
     },
     llm: {
         baseUrl: process.env.LLM_BASE_URL,

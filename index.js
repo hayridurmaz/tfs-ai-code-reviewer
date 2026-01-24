@@ -3,6 +3,7 @@ import { getRepositories, getActivePullRequests, getIterations, getIterationChan
 import { isIterationReviewed, markIterationReviewed } from './state-store.js';
 import { reviewPR } from './reviewer.js';
 import { publishReview } from './publisher.js';
+import logger from './logger.js';
 
 // Tek bir PR'ı işle
 async function processPR(repo, pr) {
@@ -16,10 +17,11 @@ async function processPR(repo, pr) {
         const iterationId = latestIteration.id;
 
         if (isIterationReviewed(repo.id, pr.pullRequestId, iterationId)) {
+            logger.info(`  ⏭️ PR #${pr.pullRequestId} - iteration ${iterationId} zaten incelendi, atlanıyor.`);
             return; // Zaten incelendi
         }
 
-        console.log(`  🔍 PR #${pr.pullRequestId} - iteration ${iterationId} inceleniyor...`);
+        logger.info(`🔍 PR #${pr.pullRequestId} - iteration ${iterationId} inceleniyor...`);
 
         // 4) PR detaylarını ve değişiklikleri al
         const [prData, changes] = await Promise.all([
@@ -27,32 +29,32 @@ async function processPR(repo, pr) {
             getIterationChanges(repo.id, pr.pullRequestId, iterationId)
         ]);
 
-        console.log(`PR Data fetched for #${pr.pullRequestId}`);
+        logger.info(`PR Data fetched for #${pr.pullRequestId}`);
 
         // 5) LLM ile incele
         const reviewResult = await reviewPR(prData, changes);
-        console.log(`Review finished for #${pr.pullRequestId}`);
+        logger.info(`Review finished for #${pr.pullRequestId}`);
 
         // 6) Yorumları yayınla
         await publishReview(repo.id, pr.pullRequestId, iterationId, reviewResult);
 
         // 7) State'i güncelle
-        markIterationReviewed(repo.id, pr.pullRequestId, iterationId);
+        markIterationReviewed(repo.id, pr.pullRequestId, iterationId, reviewResult);
 
-        console.log(`  ✅ PR #${pr.pullRequestId} incelendi ve yorumlar eklendi`);
+        logger.info(`✅ PR #${pr.pullRequestId} incelendi ve yorumlar eklendi`);
     } catch (err) {
-        console.error(`❌ PR #${pr.pullRequestId} hatası:`, err.message);
+        logger.error(`❌ PR #${pr.pullRequestId} hatası:`, { message: err.message, stack: err.stack });
     }
 }
 
 // Tek bir repoyu işle
 async function processRepo(repo) {
-    console.log(`📂 Repo: ${repo.name} (${repo.id})`);
+    logger.info(`📂 Repo: ${repo.name} (${repo.id})`);
 
     try {
         // 2) Aktif PR'ları al
         const prs = await getActivePullRequests(repo.id);
-        console.log(`  └─ ${repo.name}: ${prs.length} aktif PR bulundu`);
+        logger.info(`  └─ ${repo.name}: ${prs.length} aktif PR bulundu`);
 
         // PR'ları paralel işle
         const results = await Promise.allSettled(prs.map(pr => processPR(repo, pr)));
@@ -60,16 +62,16 @@ async function processRepo(repo) {
         // Hataları özetle (isteğe bağlı)
         const failed = results.filter(r => r.status === 'rejected');
         if (failed.length > 0) {
-            console.error(`  ⚠️ ${repo.name} reposunda ${failed.length} PR işlenemedi.`);
+            logger.error(`⚠️ ${repo.name} reposunda ${failed.length} PR işlenemedi.`);
         }
 
     } catch (err) {
-        console.error(`❌ Repo hatası (${repo.name}):`, err.message);
+        logger.error(`❌ Repo hatası (${repo.name}):`, { message: err.message });
     }
 }
 
 async function pollOnce() {
-    console.log(`🔄 Polling başladı... (${new Date().toISOString()})`);
+    logger.info(`🔄 Polling başladı...`);
 
     try {
         // 1) Repoları al
@@ -82,17 +84,18 @@ async function pollOnce() {
         await Promise.allSettled(repos.map(repo => processRepo(repo)));
 
     } catch (err) {
-        console.error('❌ Polling genel hatası:', err.message);
+        logger.error('❌ Polling genel hatası:', { message: err.message });
     }
 
-    console.log(`✅ Polling tamamlandı. ${config.bot.pollIntervalSec}s sonra tekrar...\n`);
+    logger.info(`✅ Polling tamamlandı. ${config.bot.pollIntervalSec}s sonra tekrar...\n`);
 }
 
 async function start() {
-    console.log('🚀 AI PR Reviewer Bot başlatıldı');
-    console.log(`   ADO: ${config.ado.baseUrl}`);
-    console.log(`   Proje: ${config.ado.project}`);
-    console.log(`   Interval: ${config.bot.pollIntervalSec}s\n`);
+    logger.info('🚀 AI PR Reviewer Bot başlatıldı', {
+        ado: config.ado.baseUrl,
+        project: config.ado.project,
+        interval: config.bot.pollIntervalSec
+    });
 
     // İlk çalıştırma
     await pollOnce();

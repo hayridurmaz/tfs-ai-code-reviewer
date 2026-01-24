@@ -3,6 +3,7 @@ import { SYSTEM_PROMPT, buildUserPrompt } from './prompts.js';
 import config from './config.js';
 import { minimatch } from 'minimatch';
 import { getFileContent } from './ado-client.js';
+import logger from './logger.js';
 
 function shouldIgnoreFile(path) {
     return config.ignorePatterns.some(pattern => minimatch(path, pattern));
@@ -27,7 +28,7 @@ async function prepareFileContext(changeEntry) {
         const content = await getFileContent(changeEntry.item.url);
 
         if (Buffer.byteLength(content, 'utf8') > config.bot.maxFileSizeBytes) {
-            console.log(`⚠️ Dosya çok büyük, atlanıyor: ${changeEntry.item.path}`);
+            logger.warn(`⚠️ Dosya çok büyük, atlanıyor: ${changeEntry.item.path}`);
             return null;
         }
 
@@ -38,7 +39,7 @@ async function prepareFileContext(changeEntry) {
         };
 
     } catch (err) {
-        console.error(`❌ Dosya indirilemedi: ${changeEntry.item.path}`, err.message);
+        logger.error(`❌ Dosya indirilemedi: ${changeEntry.item.path}`, { message: err.message });
         return null;
     }
 }
@@ -53,12 +54,12 @@ export async function reviewPR(prData, changes) {
 
     const userPrompt = buildUserPrompt(prData.title, prData.description, fileDiffs);
 
-    console.log(`🧠 LLM'e gönderiliyor... (${fileDiffs.length} dosya)`);
+    logger.info(`🧠 LLM'e gönderiliyor... (${fileDiffs.length} dosya)`);
     const result = await reviewCode(SYSTEM_PROMPT, userPrompt);
 
     // Güven filtresi
     if (!result || !Array.isArray(result.comments)) {
-        console.warn('⚠️ LLM geçersiz yanıt döndürdü, comments array eksik:', result);
+        logger.warn('⚠️ LLM geçersiz yanıt döndürdü, comments array eksik:', result);
         result = { summary: 'LLM yanıtı işlenemedi.', comments: [] };
     }
 

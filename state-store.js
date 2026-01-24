@@ -8,6 +8,7 @@ db.exec(`
     pr_id INTEGER,
     iteration_id INTEGER,
     reviewed_at TEXT,
+    review_result TEXT,
     PRIMARY KEY (repo_id, pr_id, iteration_id)
   )
 `);
@@ -20,22 +21,23 @@ db.exec(`
 `);
 
 export function isIterationReviewed(repoId, prId, iterationId) {
-    const row = db.prepare('SELECT 1 FROM reviewed_iterations WHERE repo_id=? AND pr_id=? AND iteration_id=?')
-        .get(repoId, prId, iterationId);
-    return !!row;
+  const row = db.prepare('SELECT 1 FROM reviewed_iterations WHERE repo_id=? AND pr_id=? AND iteration_id=?')
+    .get(repoId, prId, iterationId);
+  return !!row;
 }
 
-export function markIterationReviewed(repoId, prId, iterationId) {
-    db.prepare('INSERT OR IGNORE INTO reviewed_iterations VALUES (?, ?, ?, ?)')
-        .run(repoId, prId, iterationId, new Date().toISOString());
+export function markIterationReviewed(repoId, prId, iterationId, reviewResult) {
+  const resultJson = reviewResult ? JSON.stringify(reviewResult) : null;
+  db.prepare('INSERT OR IGNORE INTO reviewed_iterations (repo_id, pr_id, iteration_id, reviewed_at, review_result) VALUES (?, ?, ?, ?, ?)')
+    .run(repoId, prId, iterationId, new Date().toISOString(), resultJson);
 }
 
 export function isCommentPosted(fingerprint) {
-    const row = db.prepare('SELECT 1 FROM posted_comments WHERE fingerprint=?').get(fingerprint);
-    return !!row;
+  const row = db.prepare('SELECT 1 FROM posted_comments WHERE fingerprint=?').get(fingerprint);
+  return !!row;
 }
 
 export function markCommentPosted(fingerprint) {
-    db.prepare('INSERT OR IGNORE INTO posted_comments VALUES (?, ?)')
-        .run(fingerprint, new Date().toISOString());
+  db.prepare('INSERT OR IGNORE INTO posted_comments VALUES (?, ?)')
+    .run(fingerprint, new Date().toISOString());
 }

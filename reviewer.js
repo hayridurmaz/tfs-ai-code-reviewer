@@ -57,6 +57,11 @@ export async function reviewPR(prData, changes) {
     const result = await reviewCode(SYSTEM_PROMPT, userPrompt);
 
     // Güven filtresi
+    if (!result || !Array.isArray(result.comments)) {
+        console.warn('⚠️ LLM geçersiz yanıt döndürdü, comments array eksik:', result);
+        result = { summary: 'LLM yanıtı işlenemedi.', comments: [] };
+    }
+
     result.comments = result.comments.filter(c => c.confidence >= config.bot.minConfidence);
 
     // Dosya başına max yorum

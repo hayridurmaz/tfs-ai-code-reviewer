@@ -1,0 +1,14 @@
+{
+    "name": "ai-pr-reviewer",
+    "version": "1.0.0",
+    "type": "module",
+    "scripts": {
+        "start": "node index.js"
+    },
+    "dependencies": {
+        "axios": "^1.6.0",
+        "better-sqlite3": "^9.2.0",
+        "dotenv": "^16.3.1",
+        "js-yaml": "^4.1.0"
+    }
+}

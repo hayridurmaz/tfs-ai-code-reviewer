@@ -24,12 +24,17 @@ export async function publishReview(repoId, prId, iterationId, reviewResult) {
     const threads = [];
 
     // 1) Özet yorumu (genel, satırsız)
-    const summaryFp = makeFingerprint(repoId, prId, iterationId, '__summary__', reviewResult.summary);
+    let summaryText = reviewResult.summary;
+    if (Array.isArray(summaryText)) {
+        summaryText = summaryText.join('\n\n');
+    }
+
+    const summaryFp = makeFingerprint(repoId, prId, iterationId, '__summary__', summaryText);
     if (!isCommentPosted(summaryFp)) {
         threads.push({
             comments: [{
                 parentCommentId: 0,
-                content: `🤖 **AI Code Review (Iteration ${iterationId})**\n\n${reviewResult.summary}`,
+                content: `🤖 **AI Code Review (Iteration ${iterationId})**\n\n${summaryText}`,
                 commentType: 1
             }],
             status: 1 // active
@@ -39,7 +44,10 @@ export async function publishReview(repoId, prId, iterationId, reviewResult) {
 
     // 2) Inline yorumlar (dosya + satır bazlı)
     for (const comment of reviewResult.comments) {
-        const fp = makeFingerprint(repoId, prId, iterationId, comment.path, comment.message);
+        // ADO path'lerin başında '/' olmasını bekler
+        const cleanPath = comment.path.startsWith('/') ? comment.path : '/' + comment.path;
+
+        const fp = makeFingerprint(repoId, prId, iterationId, cleanPath, comment.message);
         if (isCommentPosted(fp)) continue;
 
         const severityEmoji = { major: '🔴', minor: '🟡', nit: '⚪' }[comment.severity] || '🔵';
@@ -57,14 +65,14 @@ export async function publishReview(repoId, prId, iterationId, reviewResult) {
         // Eğer satır bilgisi varsa threadContext ekle (inline yorum)
         if (comment.line) {
             thread.threadContext = {
-                filePath: comment.path,
+                filePath: cleanPath,
                 rightFileStart: { line: comment.line, offset: 1 },
                 rightFileEnd: { line: comment.line, offset: 1 }
             };
         } else {
             // Satır yoksa dosya seviyesinde thread (V1 fallback)
             thread.threadContext = {
-                filePath: comment.path
+                filePath: cleanPath
             };
         }
 

@@ -2,7 +2,7 @@ services:
   ai-reviewer:
     # Build locally or use pre-built image from GHCR
     # build: .
-    image: ghcr.io/hayridurmaz/ai-pr-reviewer:latest
+    image: ghcr.io/hayridurmaz/tfs-ai-code-reviewer:latest
     container_name: ai-pr-reviewer
     restart: unless-stopped
     env_file:

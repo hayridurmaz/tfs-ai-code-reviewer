@@ -1,4 +1,7 @@
 import winston from 'winston';
+import path from 'path';
+
+const LOG_DIR = 'data';
 
 const logger = winston.createLogger({
     level: 'info',
@@ -8,7 +11,7 @@ const logger = winston.createLogger({
     ),
     transports: [
         // Dosyaya yaz (detaylı, timestamp'li, json)
-        new winston.transports.File({ filename: 'app.log' }),
+        new winston.transports.File({ filename: path.join(LOG_DIR, 'app.log') }),
     ],
 });
 

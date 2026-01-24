@@ -1,0 +1,15 @@
+services:
+  ai-reviewer:
+    build: .
+    container_name: ai-pr-reviewer
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Veri dizinini (DB ve loglar) persist et
+      - ./data:/app/data
+    # SQLite kilitlenmelerini önlemek için bazı durumlarda gerekli olabilir
+    # user: "1000:1000" 
+
+volumes:
+  state_data:

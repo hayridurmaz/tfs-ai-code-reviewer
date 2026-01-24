@@ -1,7 +1,7 @@
 import crypto from 'crypto';
-import { createThread } from './ado-client.js';
-import { isCommentPosted, markCommentPosted } from './state-store.js';
-import config from './config.js';
+import { createThread } from './ado.service.js';
+import { isCommentPosted, markCommentPosted } from '../utils/state-store.js';
+import config from '../config/index.js';
 
 function makeFingerprint(repoId, prId, iterationId, path, message) {
     const str = `${repoId}:${prId}:${iterationId}:${path}:${message.substring(0, 50)}`;

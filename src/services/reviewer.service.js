@@ -1,23 +1,19 @@
-import { reviewCode } from './llm-client.js';
+import { reviewCode } from './llm.service.js';
 import { SYSTEM_PROMPT, buildUserPrompt } from './prompts.js';
-import config from './config.js';
+import config from '../config/index.js';
 import { minimatch } from 'minimatch';
-import { getFileContent } from './ado-client.js';
-import logger from './logger.js';
+import { getFileContent } from './ado.service.js';
+import logger from '../utils/logger.js';
+import { createPatch } from 'diff';
 
 function shouldIgnoreFile(path) {
     return config.ignorePatterns.some(pattern => minimatch(path, pattern));
 }
 
-import { createPatch } from 'diff';
-
 async function prepareFileContext(changeEntry) {
     if (!changeEntry.item || !changeEntry.item.path) return null;
     if (changeEntry.changeType === 'delete') return null;
     if (shouldIgnoreFile(changeEntry.item.path)) return null;
-
-    // Uzantı kontrolü (örneğin sadece kod dosyaları)
-    // Şimdilik ignorePatterns yeterli
 
     // Dosya içeriğini çek
     try {
@@ -42,7 +38,6 @@ async function prepareFileContext(changeEntry) {
         }
 
         // Diff oluştur
-        // createPatch(fileName, oldStr, newStr, oldHeader, newHeader, options)
         const diffPatch = createPatch(changeEntry.item.path, originalContent, content);
 
         return {
@@ -73,7 +68,7 @@ export async function reviewPR(prData, changes) {
     // Güven filtresi
     if (!result || !Array.isArray(result.comments)) {
         logger.warn('⚠️ LLM geçersiz yanıt döndürdü, comments array eksik:', result);
-        result = { summary: 'LLM yanıtı işlenemedi.', comments: [] };
+        return { summary: 'LLM yanıtı işlenemedi.', comments: [] };
     }
 
     result.comments = result.comments.filter(c => c.confidence >= config.bot.minConfidence);

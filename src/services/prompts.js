@@ -30,13 +30,13 @@ KRİTİK KURALLAR:
 6. **Türkçe:** Yanıtların profesyonel, yapıcı ve Türkçe olsun.`;
 
 export function buildUserPrompt(prTitle, prDescription, fileDiffs) {
-  let prompt = `# Pull Request\n**Başlık:** ${prTitle}\n**Açıklama:** ${prDescription || 'Yok'}\n\n`;
-  prompt += `# Değişen Dosyalar (${fileDiffs.length} adet)\n\n`;
+    let prompt = `# Pull Request\n**Başlık:** ${prTitle}\n**Açıklama:** ${prDescription || 'Yok'}\n\n`;
+    prompt += `# Değişen Dosyalar (${fileDiffs.length} adet)\n\n`;
 
-  fileDiffs.forEach(f => {
-    prompt += `## ${f.path}\n\`\`\`diff\n${f.diff}\n\`\`\`\n\n`;
-  });
+    fileDiffs.forEach(f => {
+        prompt += `## ${f.path}\n\`\`\`diff\n${f.diff}\n\`\`\`\n\n`;
+    });
 
-  prompt += `Lütfen yukarıdaki PR'ı incele ve JSON formatında yorum ver.`;
-  return prompt;
+    prompt += `Lütfen yukarıdaki PR'ı incele ve JSON formatında yorum ver.`;
+    return prompt;
 }

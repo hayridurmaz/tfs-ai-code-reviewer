@@ -1,9 +1,9 @@
-import config from './config.js';
-import { getRepositories, getActivePullRequests, getIterations, getIterationChanges, getPullRequest } from './ado-client.js';
-import { isIterationReviewed, markIterationReviewed } from './state-store.js';
-import { reviewPR } from './reviewer.js';
-import { publishReview } from './publisher.js';
-import logger from './logger.js';
+import config from './config/index.js';
+import { getRepositories, getActivePullRequests, getIterations, getIterationChanges, getPullRequest } from './services/ado.service.js';
+import { isIterationReviewed, markIterationReviewed } from './utils/state-store.js';
+import { reviewPR } from './services/reviewer.service.js';
+import { publishReview } from './services/publisher.service.js';
+import logger from './utils/logger.js';
 
 // Tek bir PR'ı işle
 async function processPR(repo, pr) {
@@ -114,7 +114,7 @@ async function pollOnce() {
         logger.error('❌ Polling genel hatası:', { message: err.message });
     }
 
-    logger.info(`✅ Polling tamamlandı. ${config.bot.pollIntervalSec}s sonra tekrar...\n`);
+    logger.info(`✅ Polling tamamlandı. ${config.bot.pollIntervalSec}s sonra tekrar...`);
 }
 
 async function start() {

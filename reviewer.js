@@ -1,7 +1,7 @@
 import { reviewCode } from './llm-client.js';
 import { SYSTEM_PROMPT, buildUserPrompt } from './prompts.js';
 import config from './config.js';
-import minimatch from 'minimatch';
+import { minimatch } from 'minimatch';
 import { getFileContent } from './ado-client.js';
 
 function shouldIgnoreFile(path) {

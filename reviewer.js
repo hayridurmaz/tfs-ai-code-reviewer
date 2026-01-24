@@ -9,6 +9,8 @@ function shouldIgnoreFile(path) {
     return config.ignorePatterns.some(pattern => minimatch(path, pattern));
 }
 
+import { createPatch } from 'diff';
+
 async function prepareFileContext(changeEntry) {
     if (!changeEntry.item || !changeEntry.item.path) return null;
     if (changeEntry.changeType === 'delete') return null;
@@ -21,20 +23,31 @@ async function prepareFileContext(changeEntry) {
     try {
         if (!changeEntry.item.url) return null;
 
-        // ADO change entry içinde bazen size bilgisi olmayabilir ama genelde header'dan vs anlaşılır.
-        // Biz burada indirdikten sonra veya indirmeden önce kontrol edebiliriz.
-        // ADO API get changes bazen size dönmez.
+        const contentPromise = getFileContent(changeEntry.item.url);
+        let originalContentPromise = Promise.resolve('');
 
-        const content = await getFileContent(changeEntry.item.url);
+        // Eğer edit ise ve originalUrl varsa eski içeriği de çek
+        if (changeEntry.changeType === 'edit' && changeEntry.item.originalUrl) {
+            originalContentPromise = getFileContent(changeEntry.item.originalUrl).catch(err => {
+                logger.warn(`Eski içerik indirilemedi (${changeEntry.item.path}): ${err.message}`);
+                return '';
+            });
+        }
+
+        const [content, originalContent] = await Promise.all([contentPromise, originalContentPromise]);
 
         if (Buffer.byteLength(content, 'utf8') > config.bot.maxFileSizeBytes) {
             logger.warn(`⚠️ Dosya çok büyük, atlanıyor: ${changeEntry.item.path}`);
             return null;
         }
 
+        // Diff oluştur
+        // createPatch(fileName, oldStr, newStr, oldHeader, newHeader, options)
+        const diffPatch = createPatch(changeEntry.item.path, originalContent, content);
+
         return {
             path: changeEntry.item.path,
-            diff: content, // Şimdilik diff yerine full content gönderiyoruz
+            diff: diffPatch,
             changeType: changeEntry.changeType
         };
 

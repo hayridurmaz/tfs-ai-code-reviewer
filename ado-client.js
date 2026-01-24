@@ -31,18 +31,32 @@ export async function getIterations(repoId, prId) {
 }
 
 // Bir iteration'daki değişiklikleri al (diff dahil)
-// Bir iteration'daki değişiklikleri al (diff dahil)
-export async function getIterationChanges(repoId, prId, iterationId) {
-    const url = `/${config.ado.project}/_apis/git/repositories/${repoId}/pullrequests/${prId}/iterations/${iterationId}/changes?api-version=6.0`;
+// compareToIterationId verilirse incremental diff (iki iteration arası fark) döner
+export async function getIterationChanges(repoId, prId, iterationId, compareToIterationId = null) {
+    let url = `/${config.ado.project}/_apis/git/repositories/${repoId}/pullrequests/${prId}/iterations/${iterationId}/changes?api-version=6.0`;
+
+    // Eğer karşılaştırma yapılacak iteration ID varsa ekle
+    if (compareToIterationId) {
+        url += `&$compareTo=${compareToIterationId}`;
+    }
+
     const res = await client.get(url);
     const changes = res.data.changeEntries || [];
 
     // URL eksikse Blob URL'i ile tamamla (ADO bazen dönmeyebiliyor)
     changes.forEach(change => {
-        if (change.item && !change.item.url && change.item.objectId) {
-            const baseUrl = config.ado.baseUrl.endsWith('/') ? config.ado.baseUrl.slice(0, -1) : config.ado.baseUrl;
+        const baseUrl = config.ado.baseUrl.endsWith('/') ? config.ado.baseUrl.slice(0, -1) : config.ado.baseUrl;
+
+        if (change.item && change.item.objectId) {
             // $format=octetStream ekleyerek RAW içeriği almayı garanti ediyoruz (yoksa JSON metadata döner)
-            change.item.url = `${baseUrl}/${config.ado.project}/_apis/git/repositories/${repoId}/blobs/${change.item.objectId}?api-version=6.0&$format=octetStream`;
+            if (!change.item.url) {
+                change.item.url = `${baseUrl}/${config.ado.project}/_apis/git/repositories/${repoId}/blobs/${change.item.objectId}?api-version=6.0&$format=octetStream`;
+            }
+        }
+
+        // Eğer dosya değişmişse (edit), eski versiyonu da çekmek için originalUrl oluştur
+        if (change.item && change.item.originalObjectId) {
+            change.item.originalUrl = `${baseUrl}/${config.ado.project}/_apis/git/repositories/${repoId}/blobs/${change.item.originalObjectId}?api-version=6.0&$format=octetStream`;
         }
     });
 

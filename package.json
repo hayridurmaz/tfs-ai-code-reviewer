@@ -8,6 +8,7 @@
     "dependencies": {
         "axios": "^1.6.0",
         "better-sqlite3": "^12.6.2",
+        "diff": "^8.0.3",
         "dotenv": "^16.3.1",
         "js-yaml": "^4.1.0",
         "minimatch": "^10.1.1",

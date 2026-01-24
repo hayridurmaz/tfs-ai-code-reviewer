@@ -23,10 +23,18 @@ async function processPR(repo, pr) {
 
         logger.info(`🔍 PR #${pr.pullRequestId} - iteration ${iterationId} inceleniyor...`);
 
+        // Önceki iteration'ı bul (Incremental Diff için)
+        let compareToIterationId = null;
+        if (iterations.length > 1) {
+            const previousIteration = iterations[iterations.length - 2];
+            compareToIterationId = previousIteration.id;
+            logger.info(`  ℹ️ Incremental Review: Iteration ${compareToIterationId} -> ${iterationId} farkı incelenecek.`);
+        }
+
         // 4) PR detaylarını ve değişiklikleri al
         const [prData, changes] = await Promise.all([
             getPullRequest(repo.id, pr.pullRequestId),
-            getIterationChanges(repo.id, pr.pullRequestId, iterationId)
+            getIterationChanges(repo.id, pr.pullRequestId, iterationId, compareToIterationId)
         ]);
 
         logger.info(`PR Data fetched for #${pr.pullRequestId}`);

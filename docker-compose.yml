@@ -1,6 +1,8 @@
 services:
   ai-reviewer:
-    build: .
+    # Build locally or use pre-built image from GHCR
+    # build: .
+    image: ghcr.io/hayridurmaz/ai-pr-reviewer:latest
     container_name: ai-pr-reviewer
     restart: unless-stopped
     env_file:
@@ -8,6 +10,7 @@ services:
     volumes:
       # Veri dizinini (DB ve loglar) persist et
       - ./data:/app/data
+
     # SQLite kilitlenmelerini önlemek için bazı durumlarda gerekli olabilir
     # user: "1000:1000" 
 

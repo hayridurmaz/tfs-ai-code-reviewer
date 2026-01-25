@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/gobwas/glob"
 	"github.com/hayridurmaz/tfs-ai-code-reviewer/internal/ado"
@@ -104,16 +105,33 @@ func (r *Reviewer) prepareFileContext(ctx context.Context, repoID string, change
 
 func (r *Reviewer) ReviewPR(ctx context.Context, repoID string, pr ado.PullRequest, changes []ado.Change) (*llm.ReviewResult, error) {
 	var fileDiffs []FileDiff
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	// Limit concurrent file processing within a single PR review
+	fileSemaphore := make(chan struct{}, 10)
+
 	for _, change := range changes {
-		fd, err := r.prepareFileContext(ctx, repoID, change)
-		if err != nil {
-			logrus.Errorf("Error preparing context for %s: %v", change.Item.Path, err)
-			continue
-		}
-		if fd != nil {
-			fileDiffs = append(fileDiffs, *fd)
-		}
+		wg.Add(1)
+		go func(c ado.Change) {
+			defer wg.Done()
+
+			fileSemaphore <- struct{}{}
+			defer func() { <-fileSemaphore }()
+
+			fd, err := r.prepareFileContext(ctx, repoID, c)
+			if err != nil {
+				logrus.Errorf("Error preparing context for %s: %v", c.Item.Path, err)
+				return
+			}
+			if fd != nil {
+				mu.Lock()
+				fileDiffs = append(fileDiffs, *fd)
+				mu.Unlock()
+			}
+		}(change)
 	}
+	wg.Wait()
 
 	if len(fileDiffs) == 0 {
 		return &llm.ReviewResult{

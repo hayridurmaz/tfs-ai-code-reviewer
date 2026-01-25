@@ -30,6 +30,7 @@ type Config struct {
 		DryRun             bool    `env:"DRY_RUN" envDefault:"false"`
 		LogPath            string  `env:"LOG_PATH" envDefault:"data/app.log"`
 		DBPath             string  `env:"DB_PATH" envDefault:"data/bot-state.db"`
+		MaxConcurrentPRs   int     `env:"MAX_CONCURRENT_PRS" envDefault:"5"`
 	}
 	IgnorePatterns []string `env:"IGNORE_PATTERNS" envSeparator:"," envDefault:"*.md,*.txt,package-lock.json,yarn.lock"`
 }

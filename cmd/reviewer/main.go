@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -18,6 +20,35 @@ import (
 	"github.com/hayridurmaz/tfs-ai-code-reviewer/internal/state"
 	"github.com/sirupsen/logrus"
 )
+
+type Tracker struct {
+	mu         sync.Mutex
+	inProgress map[string]bool
+}
+
+func NewTracker() *Tracker {
+	return &Tracker{
+		inProgress: make(map[string]bool),
+	}
+}
+
+func (t *Tracker) Lock(repoID string, prID, iterationID int) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	key := fmt.Sprintf("%s-%d-%d", repoID, prID, iterationID)
+	if t.inProgress[key] {
+		return false
+	}
+	t.inProgress[key] = true
+	return true
+}
+
+func (t *Tracker) Unlock(repoID string, prID, iterationID int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	key := fmt.Sprintf("%s-%d-%d", repoID, prID, iterationID)
+	delete(t.inProgress, key)
+}
 
 func main() {
 	// 1) Load config
@@ -57,6 +88,7 @@ func main() {
 	llmClient := llm.NewClient(cfg.LLM.BaseURL, cfg.LLM.APIKey, cfg.LLM.Model, cfg.LLM.MaxRetries)
 	rev := reviewer.NewReviewer(cfg, adoClient, llmClient)
 	pub := publisher.NewPublisher(adoClient)
+	tracker := NewTracker()
 
 	// 3) Polling loop
 	ctx, cancel := context.WithCancel(context.Background())
@@ -76,7 +108,7 @@ func main() {
 		case <-ctx.Done():
 			return
 		default:
-			pollOnce(ctx, cfg, store, adoClient, rev, pub)
+			pollOnce(ctx, cfg, store, adoClient, rev, pub, tracker)
 			logrus.Infof("✅ Polling completed. Waiting %ds...", cfg.Bot.PollIntervalSec)
 
 			select {
@@ -88,7 +120,7 @@ func main() {
 	}
 }
 
-func pollOnce(ctx context.Context, cfg *config.Config, store *state.Store, adoClient *ado.Client, rev *reviewer.Reviewer, pub *publisher.Publisher) {
+func pollOnce(ctx context.Context, cfg *config.Config, store *state.Store, adoClient *ado.Client, rev *reviewer.Reviewer, pub *publisher.Publisher, tracker *Tracker) {
 	logrus.Info("🔄 Polling started...")
 
 	repos, err := adoClient.GetRepositories()
@@ -111,12 +143,20 @@ func pollOnce(ctx context.Context, cfg *config.Config, store *state.Store, adoCl
 		repos = filtered
 	}
 
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, cfg.Bot.MaxConcurrentPRs)
+
 	for _, repo := range repos {
-		processRepo(ctx, cfg, repo, store, adoClient, rev, pub)
+		wg.Add(1)
+		go func(r ado.Repository) {
+			defer wg.Done()
+			processRepo(ctx, cfg, r, store, adoClient, rev, pub, semaphore, tracker)
+		}(repo)
 	}
+	wg.Wait()
 }
 
-func processRepo(ctx context.Context, cfg *config.Config, repo ado.Repository, store *state.Store, adoClient *ado.Client, rev *reviewer.Reviewer, pub *publisher.Publisher) {
+func processRepo(ctx context.Context, cfg *config.Config, repo ado.Repository, store *state.Store, adoClient *ado.Client, rev *reviewer.Reviewer, pub *publisher.Publisher, semaphore chan struct{}, tracker *Tracker) {
 	logrus.Infof("📂 Repo: %s (%s)", repo.Name, repo.ID)
 
 	prs, err := adoClient.GetActivePullRequests(repo.ID)
@@ -164,11 +204,15 @@ func processRepo(ctx context.Context, cfg *config.Config, repo ado.Repository, s
 	logrus.Infof("  └─ %s: %d active PRs found", repo.Name, len(prs))
 
 	for _, pr := range prs {
-		processPR(ctx, cfg, repo, pr, store, adoClient, rev, pub)
+		semaphore <- struct{}{} // Acquire semaphore
+		go func(p ado.PullRequest) {
+			defer func() { <-semaphore }() // Release semaphore
+			processPR(ctx, cfg, repo, p, store, adoClient, rev, pub, tracker)
+		}(pr)
 	}
 }
 
-func processPR(ctx context.Context, cfg *config.Config, repo ado.Repository, pr ado.PullRequest, store *state.Store, adoClient *ado.Client, rev *reviewer.Reviewer, pub *publisher.Publisher) {
+func processPR(ctx context.Context, cfg *config.Config, repo ado.Repository, pr ado.PullRequest, store *state.Store, adoClient *ado.Client, rev *reviewer.Reviewer, pub *publisher.Publisher, tracker *Tracker) {
 	iterations, err := adoClient.GetIterations(repo.ID, pr.PullRequestId)
 	if err != nil {
 		logrus.Errorf("Failed to get iterations for PR #%d: %v", pr.PullRequestId, err)
@@ -180,6 +224,12 @@ func processPR(ctx context.Context, cfg *config.Config, repo ado.Repository, pr 
 	}
 
 	latestIteration := iterations[len(iterations)-1]
+
+	// Check if already being reviewed by another goroutine
+	if !tracker.Lock(repo.ID, pr.PullRequestId, latestIteration.ID) {
+		return
+	}
+	defer tracker.Unlock(repo.ID, pr.PullRequestId, latestIteration.ID)
 
 	reviewed, err := store.IsIterationReviewed(repo.ID, pr.PullRequestId, latestIteration.ID)
 	if err != nil {

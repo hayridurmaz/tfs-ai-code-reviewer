@@ -2,7 +2,8 @@ version: '3.8'
 
 services:
   reviewer:
-    build: .
+#    build: .
+    image: ghcr.io/hayridurmaz/tfs-ai-code-reviewer:latest
     container_name: ai-pr-reviewer
     restart: unless-stopped
     env_file: .env

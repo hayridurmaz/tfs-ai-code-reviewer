@@ -1,29 +1,27 @@
-FROM node:20-slim
+# Build stage
+FROM golang:alpine AS builder
 
-# Create app directory
 WORKDIR /app
 
-# Install build essentials for better-sqlite3 (native bindings)
-RUN apt-get update && apt-get install -y \
-    python3 \
-    make \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
+# Install build dependencies
+RUN apk add --no-cache build-base
 
-# Copy package files
-COPY package*.json ./
+COPY go.mod go.sum ./
+RUN go mod download
 
-# Install dependencies
-RUN npm install --omit=dev
-
-# Copy app source
 COPY . .
 
-# Create directory for persistent data
-RUN mkdir -p /app/data
+RUN go build -o build/reviewer ./cmd/reviewer/main.go
 
-# Environment defaults
-ENV NODE_ENV=production
+# Final stage
+FROM alpine:latest
 
-# Run the application
-CMD ["node", "src/index.js"]
+WORKDIR /app
+
+# Install CA certificates for HTTPS
+RUN apk add --no-cache ca-certificates
+
+COPY --from=builder /app/build/reviewer .
+# No .env copy here, it should be mounted or provided via env vars
+
+CMD ["./reviewer"]

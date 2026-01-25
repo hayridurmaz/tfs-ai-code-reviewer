@@ -1,10 +1,10 @@
-# 🤖 AI Pull Request Reviewer for Azure DevOps
+# 🤖 AI Pull Request Reviewer for Azure DevOps (Go)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
+[![Go Version](https://img.shields.io/badge/go-%3E%3D1.21-blue.svg)](https://golang.org/)
 [![Azure DevOps](https://img.shields.io/badge/Azure%20DevOps-TFS%20/%20Server%20/%20Services-blue.svg)](https://azure.microsoft.com/en-us/products/devops/)
 
-An intelligent, automated code review assistant designed specifically for **Azure DevOps (ADO)** environment. It monitors your pull requests, analyzes changes using Large Language Models (LLMs), and provides high-quality, actionable feedback directly as PR comments.
+An intelligent, automated code review assistant designed specifically for **Azure DevOps (ADO)** environment. Now rewritten in **Go** for maximum performance and easier deployment.
 
 ---
 
@@ -16,30 +16,29 @@ An intelligent, automated code review assistant designed specifically for **Azur
 -   **📝 Senior Engineer Persona:** Provides deep technical insights on security, performance, and architecture rather than trivial style issues.
 -   **🛡️ State Management:** Uses SQLite to keep track of reviewed iterations and posted comments, ensuring zero duplicate noise.
 -   **🎯 Advanced Filtering:** Filter by target branches or exclude specific PR IDs via configuration.
--   **📜 Detailed Logging:** Professional file and console logging powered by Winston.
+-   **📜 Performance:** Lightweight Go binary with minimal memory footprint.
 
 ---
 
 ## 🛠️ Tech Stack
 
--   **Runtime:** Node.js (ES Modules)
--   **API Client:** Axios
--   **Database:** SQLite (Better-SQLite3)
--   **Logging:** Winston
--   **Diffing:** `diff` package for patch generation
+-   **Runtime:** Go 1.21+
+-   **Database:** SQLite (CGO-free via `modernc.org/sqlite`)
+-   **Configuration:** Clean environment-based config via `caarlos0/env`
+-   **Diffing:** High-performance diffing via `hexops/gotextdiff`
 
 ---
 
 ## ⚙️ Configuration
 
-Create a `.env` file in the root directory based on `.env.example`:
+Create a `.env` file in the root directory:
 
 ```env
 # Azure DevOps Configuration
 ADO_BASE_URL=https://dev.azure.com/your-org
 ADO_PAT=your-personal-access-token
 PROJECT_NAME=your-project
-REPO_NAMES=repo1,repo2           # Comma separated (Optional: reviews all if empty)
+REPO_NAMES=repo1,repo2           # Comma separated (Optional)
 TARGET_BRANCHES=main,develop    # Filter by target branch (Optional)
 IGNORE_PR_IDS=101,105           # Exclude specific PRs (Optional)
 
@@ -60,33 +59,21 @@ DRY_RUN=false                  # If true, logs review to console without posting
 
 ## 🚦 Getting Started
 
-1.  **Clone the repository:**
+1.  **Clone and Build:**
     ```bash
     git clone https://github.com/youruser/ai-pr-reviewer.git
     cd ai-pr-reviewer
+    go build -o reviewer ./cmd/reviewer/main.go
     ```
 
-2.  **Install dependencies:**
+2.  **Run the bot:**
     ```bash
-    npm install
-    ```
-
-3.  **Configure environment:**
-    ```bash
-    cp .env.example .env
-    # Edit .env with your credentials
-    ```
-
-4.  **Run the bot:**
-    ```bash
-    npm start
+    ./reviewer
     ```
 
 ---
 
 ## 🐳 Docker
-
-The easiest way to run the reviewer in production is using Docker Compose.
 
 1.  **Build and start:**
     ```bash
@@ -98,31 +85,22 @@ The easiest way to run the reviewer in production is using Docker Compose.
     docker-compose logs -f
     ```
 
-Your database (`bot-state.db`) and logs (`app.log`) will be persisted in the project directory even if the container is removed.
-
 ---
 
 ## 🧠 How it Works
 
 1.  **Polling:** The bot periodically checks for active Pull Requests in configured repositories.
-2.  **Iteration Detection:** It identifies the latest iteration of a PR and checks the local SQLite database to see if it has been reviewed.
-3.  **Diff Generation:**
-    *   If it's a new PR, it fetches all changes.
-    *   If it's an update, it fetches an **incremental diff** between the current and the previous iteration.
+2.  **Iteration Detection:** It identifies the latest iteration of a PR and checks the local SQLite database.
+3.  **Diff Generation:** Fetches incremental diffs between iterations using native ADO APIs and high-performance Go diffing.
 4.  **Analysis:** The unified patch is sent to the LLM with a specialized "Senior Staff Engineer" system prompt.
-5.  **Feedback:** The AI generates a summary and specific line-level comments with:
-    *   `severity` (major/minor/nit)
-    *   `message` (technical explanation)
-    *   `suggestion` (actual code snippets)
-6.  **Persistence:** Comments are posted to ADO and the state is updated in the database.
+5.  **Feedback:** The AI generates a summary and specific line-level comments.
+6.  **Persistence:** Comments are posted to ADO and the state is updated in SQLite.
 
 ---
 
 ## 🤝 Contributing
 
-Contributions make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
-
-Check out our [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to get started.
+Any contributions you make are **greatly appreciated**.
 
 1.  Fork the Project
 2.  Create your Feature Branch (`git checkout -b feature/AmazingFeature`)

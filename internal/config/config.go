@@ -31,6 +31,7 @@ type Config struct {
 		LogPath            string  `env:"LOG_PATH" envDefault:"data/app.log"`
 		DBPath             string  `env:"DB_PATH" envDefault:"data/bot-state.db"`
 		MaxConcurrentPRs   int     `env:"MAX_CONCURRENT_PRS" envDefault:"5"`
+		TimeoutSec         int     `env:"HTTP_TIMEOUT_SEC" envDefault:"30"`
 	}
 	IgnorePatterns []string `env:"IGNORE_PATTERNS" envSeparator:"," envDefault:"*.md,*.txt,package-lock.json,yarn.lock"`
 }

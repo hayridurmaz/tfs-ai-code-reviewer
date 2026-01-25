@@ -36,7 +36,7 @@ func NewOrchestrator(cfg *config.Config, store *state.Store, adoClient *ado.Clie
 func (o *Orchestrator) PollOnce(ctx context.Context) {
 	logrus.Info("🔄 Polling started...")
 
-	repos, err := o.adoClient.GetRepositories()
+	repos, err := o.adoClient.GetRepositories(ctx)
 	if err != nil {
 		logrus.Errorf("Failed to get repositories: %v", err)
 		return
@@ -72,7 +72,7 @@ func (o *Orchestrator) PollOnce(ctx context.Context) {
 func (o *Orchestrator) processRepo(ctx context.Context, repo ado.Repository, semaphore chan struct{}) {
 	logrus.Infof("📂 Repo: %s (%s)", repo.Name, repo.ID)
 
-	prs, err := o.adoClient.GetActivePullRequests(repo.ID)
+	prs, err := o.adoClient.GetActivePullRequests(ctx, repo.ID)
 	if err != nil {
 		logrus.Errorf("Failed to get active PRs for %s: %v", repo.Name, err)
 		return
@@ -126,7 +126,7 @@ func (o *Orchestrator) processRepo(ctx context.Context, repo ado.Repository, sem
 }
 
 func (o *Orchestrator) processPR(ctx context.Context, repo ado.Repository, pr ado.PullRequest) {
-	iterations, err := o.adoClient.GetIterations(repo.ID, pr.PullRequestId)
+	iterations, err := o.adoClient.GetIterations(ctx, repo.ID, pr.PullRequestId)
 	if err != nil {
 		logrus.Errorf("Failed to get iterations for PR #%d: %v", pr.PullRequestId, err)
 		return
@@ -163,7 +163,7 @@ func (o *Orchestrator) processPR(ctx context.Context, repo ado.Repository, pr ad
 		logrus.Infof("  ℹ️ Incremental Review: Iteration %d -> %d", *compareTo, latestIteration.ID)
 	}
 
-	changes, err := o.adoClient.GetIterationChanges(repo.ID, pr.PullRequestId, latestIteration.ID, compareTo)
+	changes, err := o.adoClient.GetIterationChanges(ctx, repo.ID, pr.PullRequestId, latestIteration.ID, compareTo)
 	if err != nil {
 		logrus.Errorf("Failed to get changes for PR #%d: %v", pr.PullRequestId, err)
 		return
@@ -184,7 +184,7 @@ func (o *Orchestrator) processPR(ctx context.Context, repo ado.Repository, pr ad
 		return
 	}
 
-	if err := o.pub.PublishReview(repo.ID, pr.PullRequestId, latestIteration.ID, result); err != nil {
+	if err := o.pub.PublishReview(ctx, repo.ID, pr.PullRequestId, latestIteration.ID, result); err != nil {
 		logrus.Errorf("Failed to publish review for PR #%d: %v", pr.PullRequestId, err)
 		return
 	}

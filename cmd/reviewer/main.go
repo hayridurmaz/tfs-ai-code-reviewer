@@ -39,7 +39,7 @@ func main() {
 	}
 	defer store.Close()
 
-	adoClient := ado.NewClient(cfg.ADO.BaseURL, cfg.ADO.ProjectName, cfg.ADO.PAT)
+	adoClient := ado.NewClient(cfg.ADO.BaseURL, cfg.ADO.ProjectName, cfg.ADO.PAT, cfg.Bot.TimeoutSec)
 	llmClient := llm.NewClient(cfg.LLM.BaseURL, cfg.LLM.APIKey, cfg.LLM.Model, cfg.LLM.MaxRetries)
 	rev := reviewer.NewReviewer(cfg, adoClient, llmClient)
 	pub := publisher.NewPublisher(adoClient)

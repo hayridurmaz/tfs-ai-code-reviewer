@@ -64,9 +64,9 @@ func (r *Reviewer) prepareFileContext(ctx context.Context, repoID string, change
 	var err error
 
 	if change.Item.ObjectId != "" {
-		content, err = r.adoClient.GetBlobContent(repoID, change.Item.ObjectId)
+		content, err = r.adoClient.GetBlobContent(ctx, repoID, change.Item.ObjectId)
 	} else if change.Item.URL != "" {
-		content, err = r.adoClient.GetFileContent(change.Item.URL)
+		content, err = r.adoClient.GetFileContent(ctx, change.Item.URL)
 	} else {
 		return nil, fmt.Errorf("no objectId or URL for %s", change.Item.Path)
 	}
@@ -83,7 +83,7 @@ func (r *Reviewer) prepareFileContext(ctx context.Context, repoID string, change
 	var originalContent string
 	if change.ChangeType == "edit" {
 		if change.Item.OriginalURL != "" {
-			originalContent, err = r.adoClient.GetFileContent(change.Item.OriginalURL)
+			originalContent, err = r.adoClient.GetFileContent(ctx, change.Item.OriginalURL)
 			if err != nil {
 				logrus.Warnf("Failed to get original content for %s: %v", change.Item.Path, err)
 				originalContent = ""

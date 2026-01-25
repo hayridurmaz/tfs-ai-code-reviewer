@@ -1,6 +1,7 @@
 package publisher
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -16,7 +17,7 @@ func NewPublisher(adoClient *ado.Client) *Publisher {
 	return &Publisher{adoClient: adoClient}
 }
 
-func (p *Publisher) PublishReview(repoID string, prID int, iterationID int, result *llm.ReviewResult) error {
+func (p *Publisher) PublishReview(ctx context.Context, repoID string, prID int, iterationID int, result *llm.ReviewResult) error {
 	// 1) Summary thread'i oluştur
 	summaryText := "### 🤖 AI Code Review Özeti\n\n"
 	for _, s := range result.Summary {
@@ -34,7 +35,7 @@ func (p *Publisher) PublishReview(repoID string, prID int, iterationID int, resu
 		"status": "fixed",
 	}
 
-	if err := p.adoClient.PostThread(repoID, prID, iterationID, summaryThread); err != nil {
+	if err := p.adoClient.PostThread(ctx, repoID, prID, iterationID, summaryThread); err != nil {
 		return fmt.Errorf("failed to post summary thread: %w", err)
 	}
 
@@ -74,7 +75,7 @@ func (p *Publisher) PublishReview(repoID string, prID int, iterationID int, resu
 			},
 		}
 
-		if err := p.adoClient.PostThread(repoID, prID, iterationID, thread); err != nil {
+		if err := p.adoClient.PostThread(ctx, repoID, prID, iterationID, thread); err != nil {
 			return fmt.Errorf("failed to post comment thread for %s: %w", comment.Path, err)
 		}
 	}

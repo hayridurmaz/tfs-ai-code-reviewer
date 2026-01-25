@@ -1,12 +1,14 @@
 package ado
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type Client struct {
@@ -16,19 +18,21 @@ type Client struct {
 	http    *http.Client
 }
 
-func NewClient(baseURL, project, pat string) *Client {
+func NewClient(baseURL, project, pat string, timeoutSec int) *Client {
 	return &Client{
 		baseURL: strings.TrimSuffix(baseURL, "/"),
 		project: project,
 		pat:     pat,
-		http:    &http.Client{},
+		http: &http.Client{
+			Timeout: time.Duration(timeoutSec) * time.Second,
+		},
 	}
 }
 
-func (c *Client) newRequest(method, url string, body io.Reader) (*http.Request, error) {
-	req, err := http.NewRequest(method, url, body)
+func (c *Client) newRequest(ctx context.Context, method, url string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	auth := base64.StdEncoding.EncodeToString([]byte(":" + c.pat))
@@ -36,6 +40,32 @@ func (c *Client) newRequest(method, url string, body io.Reader) (*http.Request, 
 	req.Header.Set("Content-Type", "application/json")
 
 	return req, nil
+}
+
+func (c *Client) doRequest(ctx context.Context, url string, result interface{}) error {
+	req, err := c.newRequest(ctx, "GET", url, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	if result != nil {
+		if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
+			return fmt.Errorf("failed to decode response: %w", err)
+		}
+	}
+
+	return nil
 }
 
 type Repository struct {
@@ -47,31 +77,12 @@ type RepositoriesResponse struct {
 	Value []Repository `json:"value"`
 }
 
-func (c *Client) GetRepositories() ([]Repository, error) {
-	url := fmt.Sprintf("%s/%s/_api/_versioncontrol/repositories", c.baseURL, c.project)
-	// Note: The above is for TFS on-prem sometimes. Let's use the standard REST API
-	url = fmt.Sprintf("%s/%s/_apis/git/repositories?api-version=6.0", c.baseURL, c.project)
-
-	req, err := c.newRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to get repositories: status %d", resp.StatusCode)
-	}
-
+func (c *Client) GetRepositories(ctx context.Context) ([]Repository, error) {
+	url := fmt.Sprintf("%s/%s/_apis/git/repositories?api-version=6.0", c.baseURL, c.project)
 	var res RepositoriesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return nil, err
+	if err := c.doRequest(ctx, url, &res); err != nil {
+		return nil, fmt.Errorf("failed to get repositories: %w", err)
 	}
-
 	return res.Value, nil
 }
 
@@ -86,25 +97,12 @@ type PullRequestsResponse struct {
 	Value []PullRequest `json:"value"`
 }
 
-func (c *Client) GetActivePullRequests(repoID string) ([]PullRequest, error) {
+func (c *Client) GetActivePullRequests(ctx context.Context, repoID string) ([]PullRequest, error) {
 	url := fmt.Sprintf("%s/%s/_apis/git/repositories/%s/pullrequests?searchCriteria.status=active&api-version=6.0", c.baseURL, c.project, repoID)
-
-	req, err := c.newRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
 	var res PullRequestsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return nil, err
+	if err := c.doRequest(ctx, url, &res); err != nil {
+		return nil, fmt.Errorf("failed to get active PRs: %w", err)
 	}
-
 	return res.Value, nil
 }
 
@@ -116,25 +114,12 @@ type IterationsResponse struct {
 	Value []Iteration `json:"value"`
 }
 
-func (c *Client) GetIterations(repoID string, prID int) ([]Iteration, error) {
+func (c *Client) GetIterations(ctx context.Context, repoID string, prID int) ([]Iteration, error) {
 	url := fmt.Sprintf("%s/%s/_apis/git/repositories/%s/pullRequests/%d/iterations?api-version=6.0", c.baseURL, c.project, repoID, prID)
-
-	req, err := c.newRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
 	var res IterationsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return nil, err
+	if err := c.doRequest(ctx, url, &res); err != nil {
+		return nil, fmt.Errorf("failed to get iterations: %w", err)
 	}
-
 	return res.Value, nil
 }
 
@@ -153,50 +138,28 @@ type ChangesResponse struct {
 	ChangeEntries []Change `json:"changeEntries"`
 }
 
-func (c *Client) GetIterationChanges(repoID string, prID, iterationID int, compareToIterationID *int) ([]Change, error) {
+func (c *Client) GetIterationChanges(ctx context.Context, repoID string, prID, iterationID int, compareToIterationID *int) ([]Change, error) {
 	url := fmt.Sprintf("%s/%s/_apis/git/repositories/%s/pullRequests/%d/iterations/%d/changes?api-version=6.0", c.baseURL, c.project, repoID, prID, iterationID)
 	if compareToIterationID != nil {
 		url += fmt.Sprintf("&compareTo=%d", *compareToIterationID)
 	}
 
-	req, err := c.newRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to get iteration changes: status %d, body: %s", resp.StatusCode, string(body))
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read iteration changes body: %w", err)
-	}
-
 	var res ChangesResponse
-	if err := json.Unmarshal(body, &res); err != nil {
-		return nil, fmt.Errorf("failed to parse iteration changes JSON: %w, raw body: %s", err, string(body))
+	if err := c.doRequest(ctx, url, &res); err != nil {
+		return nil, fmt.Errorf("failed to get iteration changes: %w", err)
 	}
-
 	return res.ChangeEntries, nil
 }
 
-func (c *Client) GetFileContent(url string) (string, error) {
-	req, err := c.newRequest("GET", url, nil)
+func (c *Client) GetFileContent(ctx context.Context, url string) (string, error) {
+	req, err := c.newRequest(ctx, "GET", url, nil)
 	if err != nil {
 		return "", err
 	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -206,55 +169,55 @@ func (c *Client) GetFileContent(url string) (string, error) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to read body: %w", err)
 	}
 
 	return string(body), nil
 }
 
-func (c *Client) GetBlobContent(repoID, objectID string) (string, error) {
+func (c *Client) GetBlobContent(ctx context.Context, repoID, objectID string) (string, error) {
 	url := fmt.Sprintf("%s/%s/_apis/git/repositories/%s/blobs/%s?api-version=6.0", c.baseURL, c.project, repoID, objectID)
 
-	req, err := c.newRequest("GET", url, nil)
+	req, err := c.newRequest(ctx, "GET", url, nil)
 	if err != nil {
 		return "", err
 	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("failed to get blob content: status %d, body: %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("api error (status %d): %s", resp.StatusCode, string(body))
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to read body: %w", err)
 	}
 
 	return string(body), nil
 }
 
-func (c *Client) PostThread(repoID string, prID int, iterationID int, threadData interface{}) error {
+func (c *Client) PostThread(ctx context.Context, repoID string, prID int, iterationID int, threadData interface{}) error {
 	url := fmt.Sprintf("%s/%s/_apis/git/repositories/%s/pullRequests/%d/threads?api-version=6.0", c.baseURL, c.project, repoID, prID)
 
 	body, err := json.Marshal(threadData)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal thread: %w", err)
 	}
 
-	req, err := c.newRequest("POST", url, strings.NewReader(string(body)))
+	req, err := c.newRequest(ctx, "POST", url, strings.NewReader(string(body)))
 	if err != nil {
 		return err
 	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 

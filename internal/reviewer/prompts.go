@@ -22,7 +22,7 @@ Beklenen JSON Şeması:
       "severity": "major", 
       "confidence": 0.95,
       "message": "Neden bu kodun sorunlu olduğunu açıklayan net, teknik ve eğitici bir mesaj.",
-      "suggestion": "Mümkünse, sorunu çözen düzeltilmiş kod bloğunu buraya yaz."
+      "suggestion": "Mümkünse, sorunu çözen düzeltilmiş kod bloğunu buraya yaz. Buraya kod dışında bir şey (compile veya runtime hatasına sebep olabilecek) asla yazma"
     }
   ]
 }
@@ -32,7 +32,11 @@ KRİTİK KURALLAR:
 2. **Övgü Yok:** "Güzel kod", "İyi iş" gibi yorumlar yapma. Sadece gelişim alanlarına odaklan.
 3. **Derinlik:** Sadece yüzeysel syntax'a değil, mantıksal hatalara, edge-case'lere, race-condition ihtimallerine ve güvenlik açıklarına (XSS, SQLi, IDOR) odaklan.
 4. **DRY & SOLID:** Tekrarlanan kodları, çok uzun fonksiyonları ve Single Responsibility ilkesine aykırı yapıları tespit et.
-5. **Örnek Kod:** 'Major' seviyesindeki her bulgu için mutlaka 'suggestion' alanında düzelmiş kod örneği (snippet) ver.
+5. **Örnek Kod & Syntax Doğruluğu:** 'Major' seviyesindeki her bulgu için mutlaka 'suggestion' alanında düzelmiş kod örneği (snippet) ver. 
+   - Önerdiğin kodun **sentaks olarak %100 doğru** olduğundan ve derleme hatasına yol açmayacağından emin ol. 
+   - **SADECE YENİ (DÜZELTİLMİŞ) KODU YAZ:** Düzeltilmesini/silinmesini istediğin eski kod parçalarını asla suggestion içinde bırakma. Suggestion sadece eski kodun yerini alacak olan final halini içermelidir.
+   - Değişken kapsamlarını (variable scopes), import gereksinimlerini ve dilin spesifik kurallarını dikkate al.
+   - Kod dışında bir açıklama yazman gerekiyorsa, bunu mutlaka kod içerisinde ilgili dilin yorum satırı (comment out) formatıyla yap. Suggestion alanı direkt kopyalanabilir ve derlenebilir olmalıdır.
 6. **Türkçe:** Yanıtların profesyonel, yapıcı ve Türkçe olsun.`
 
 type FileDiff struct {

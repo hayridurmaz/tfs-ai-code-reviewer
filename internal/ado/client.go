@@ -127,10 +127,11 @@ type Change struct {
 	ID         int    `json:"changeId"`
 	ChangeType string `json:"changeType"`
 	Item       struct {
-		Path        string `json:"path"`
-		URL         string `json:"url"`
-		OriginalURL string `json:"originalUrl"`
-		ObjectId    string `json:"objectId"`
+		Path             string `json:"path"`
+		URL              string `json:"url"`
+		OriginalURL      string `json:"originalUrl"`
+		ObjectId         string `json:"objectId"`
+		OriginalObjectId string `json:"originalObjectId"`
 	} `json:"item"`
 }
 

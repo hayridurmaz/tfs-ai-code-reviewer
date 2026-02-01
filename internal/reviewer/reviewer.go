@@ -82,15 +82,19 @@ func (r *Reviewer) prepareFileContext(ctx context.Context, repoID string, change
 
 	var originalContent string
 	if change.ChangeType == "edit" {
-		if change.Item.OriginalURL != "" {
+		if change.Item.OriginalObjectId != "" {
+			originalContent, err = r.adoClient.GetBlobContent(ctx, repoID, change.Item.OriginalObjectId)
+			if err != nil {
+				logrus.Warnf("Failed to get original content (via blob) for %s: %v", change.Item.Path, err)
+				originalContent = ""
+			}
+		} else if change.Item.OriginalURL != "" {
 			originalContent, err = r.adoClient.GetFileContent(ctx, change.Item.OriginalURL)
 			if err != nil {
-				logrus.Warnf("Failed to get original content for %s: %v", change.Item.Path, err)
+				logrus.Warnf("Failed to get original content (via URL) for %s: %v", change.Item.Path, err)
 				originalContent = ""
 			}
 		}
-		// Note: If OriginalURL is empty, we might need a way to find the base blob.
-		// For now, we fall back to empty string for the original content.
 	}
 
 	edits := myers.ComputeEdits(span.URIFromPath(change.Item.Path), originalContent, content)

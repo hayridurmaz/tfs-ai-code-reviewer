@@ -115,7 +115,9 @@ This project follows [Semantic Versioning (SemVer)](https://semver.org/).
 
 Versioning and releases are managed through Git tags:
 1.  **Tagging:** New versions are created by pushing a tag with the `v` prefix (e.g., `git tag v1.0.0`).
-2.  **Automation:** Pushing a tag automatically triggers the GitHub Actions workflow which:
+2.  **Automation:** Pushing a tag;
+```git push origin v1.0.0```
+   automatically triggers the GitHub Actions workflow which:
     - Builds the Docker image.
     - Publishes it to **GitHub Container Registry (GHCR)**.
     - Tags it with both the specific version and `latest`.

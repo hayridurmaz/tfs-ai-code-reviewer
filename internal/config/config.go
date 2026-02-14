@@ -23,15 +23,17 @@ type Config struct {
 		MaxRetries int    `env:"LLM_MAX_RETRIES" envDefault:"3"`
 	}
 	Bot struct {
-		PollIntervalSec    int     `env:"POLL_INTERVAL_SEC" envDefault:"90"`
-		MaxCommentsPerFile int     `env:"MAX_COMMENTS_PER_FILE" envDefault:"3"`
-		MinConfidence      float64 `env:"MIN_CONFIDENCE" envDefault:"0.7"`
-		MaxFileSizeBytes   int64   `env:"MAX_FILE_SIZE_BYTES" envDefault:"50000"`
-		DryRun             bool    `env:"DRY_RUN" envDefault:"false"`
-		LogPath            string  `env:"LOG_PATH" envDefault:"data/app.log"`
-		DBPath             string  `env:"DB_PATH" envDefault:"data/bot-state.db"`
-		MaxConcurrentPRs   int     `env:"MAX_CONCURRENT_PRS" envDefault:"5"`
-		TimeoutSec         int     `env:"HTTP_TIMEOUT_SEC" envDefault:"30"`
+		PollIntervalSec      int     `env:"POLL_INTERVAL_SEC" envDefault:"90"`
+		MaxCommentsPerFile   int     `env:"MAX_COMMENTS_PER_FILE" envDefault:"3"`
+		MinConfidence        float64 `env:"MIN_CONFIDENCE" envDefault:"0.7"`
+		MaxFileSizeBytes     int64   `env:"MAX_FILE_SIZE_BYTES" envDefault:"50000"`
+		MaxFilesPerBatch     int     `env:"MAX_FILES_PER_BATCH" envDefault:"5"`
+		EnableSelfCorrection bool    `env:"ENABLE_SELF_CORRECTION" envDefault:"true"`
+		DryRun               bool    `env:"DRY_RUN" envDefault:"false"`
+		LogPath              string  `env:"LOG_PATH" envDefault:"data/app.log"`
+		DBPath               string  `env:"DB_PATH" envDefault:"data/bot-state.db"`
+		MaxConcurrentPRs     int     `env:"MAX_CONCURRENT_PRS" envDefault:"5"`
+		TimeoutSec           int     `env:"HTTP_TIMEOUT_SEC" envDefault:"30"`
 	}
 	IgnorePatterns []string `env:"IGNORE_PATTERNS" envSeparator:"," envDefault:"*.md,*.txt,package-lock.json,yarn.lock"`
 }

@@ -2,6 +2,7 @@ package reviewer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -104,6 +105,7 @@ func (r *Reviewer) prepareFileContext(ctx context.Context, repoID string, change
 	return &FileDiff{
 		Path:       change.Item.Path,
 		Diff:       diff,
+		Content:    content,
 		ChangeType: change.ChangeType,
 	}, nil
 }
@@ -184,12 +186,54 @@ func (r *Reviewer) ReviewPR(ctx context.Context, repoID string, pr ado.PullReque
 		}, nil
 	}
 
+	// Determine if batching is needed
+	batchSize := r.cfg.Bot.MaxFilesPerBatch
+	if batchSize <= 0 || len(fileDiffs) <= batchSize {
+		// No batching needed - review all files in one request
+		logrus.Infof("Reviewing %d files in single request (no batching)", len(fileDiffs))
+		return r.reviewBatch(ctx, pr, fileDiffs)
+	}
+
+	// Use batching for large PRs
+	logrus.Infof("Reviewing %d files in batches of %d", len(fileDiffs), batchSize)
+	return r.reviewInBatches(ctx, pr, fileDiffs, batchSize)
+}
+
+// reviewBatch reviews a single batch of files
+func (r *Reviewer) reviewBatch(ctx context.Context, pr ado.PullRequest, fileDiffs []FileDiff) (*llm.ReviewResult, error) {
 	userPrompt := BuildUserPrompt(pr.Title, pr.Description, fileDiffs)
 
-	logrus.Infof("Sending to LLM... (%d files)", len(fileDiffs))
+	// 1. AŞAMA: Draft Review
 	result, err := r.llmClient.ReviewCode(ctx, SystemPrompt, userPrompt)
 	if err != nil {
 		return nil, err
+	}
+
+	// 2. AŞAMA: Self-Correction (Opsiyonel)
+	if r.cfg.Bot.EnableSelfCorrection {
+		logrus.Infof("🧠 Applying Self-Correction (2-Stage Verification)...")
+
+		// Taslak sonucu JSON'a çevir
+		draftJSON, _ := json.MarshalIndent(result, "", "  ") // Error ignored, safe for simple struct
+
+		// Yeni user prompt: Kod Context + Draft JSON
+		correctionUserPrompt := fmt.Sprintf("ORİJİNAL KOD CONTEXT:\n%s\n\nTASLAK İNCELEME RAPORU (DÜZELTİLECEK):\n```json\n%s\n```\n\nLütfen yukarıdaki raporu denetle, gereksizleri sil ve formatı düzelt.", userPrompt, string(draftJSON))
+
+		// LLM'e tekrar sor
+		correctedResult, err := r.llmClient.ReviewCode(ctx, SelfCorrectionPrompt, correctionUserPrompt)
+		if err == nil {
+			// Eğer başarılıysa, sonucu güncelle
+			countDiff := len(result.Comments) - len(correctedResult.Comments)
+			logrus.Infof("✅ Self-Correction complete. Filtered %d comments. Final count: %d", countDiff, len(correctedResult.Comments))
+			result = correctedResult
+		} else {
+			logrus.Warnf("⚠️ Self-Correction failed: %v. Using original draft.", err)
+		}
+	}
+
+	// Clean suggestions (Post-process cleanup is still useful)
+	for i := range result.Comments {
+		result.Comments[i].Suggestion = r.cleanSuggestion(result.Comments[i].Suggestion)
 	}
 
 	// Validate comments against actual changed files
@@ -220,6 +264,91 @@ func (r *Reviewer) ReviewPR(ctx context.Context, repoID string, pr ado.PullReque
 
 	result.Comments = finalComments
 	return result, nil
+}
+
+// cleanSuggestion removes markdown formatting and extra whitespace from valid suggestions
+func (r *Reviewer) cleanSuggestion(suggestion string) string {
+	if suggestion == "" {
+		return ""
+	}
+
+	// Remove markdown code blocks
+	s := strings.TrimSpace(suggestion)
+
+	// Handle opening ```
+	if strings.HasPrefix(s, "```") {
+		// Find end of first line
+		if idx := strings.Index(s, "\n"); idx != -1 {
+			s = s[idx+1:]
+		} else {
+			// Only has opening ticks and maybe language name
+			s = strings.TrimPrefix(s, "```")
+		}
+	}
+
+	// Handle closing ```
+	s = strings.TrimSuffix(s, "```")
+
+	return strings.TrimSpace(s)
+}
+
+// reviewInBatches splits files into batches and reviews each separately
+func (r *Reviewer) reviewInBatches(ctx context.Context, pr ado.PullRequest, fileDiffs []FileDiff, batchSize int) (*llm.ReviewResult, error) {
+	var allComments []llm.Comment
+	var allSummaries []string
+	var mu sync.Mutex
+
+	numBatches := (len(fileDiffs) + batchSize - 1) / batchSize
+
+	for i := 0; i < len(fileDiffs); i += batchSize {
+		end := i + batchSize
+		if end > len(fileDiffs) {
+			end = len(fileDiffs)
+		}
+
+		batch := fileDiffs[i:end]
+		batchNum := i/batchSize + 1
+
+		logrus.Infof("📦 Batch %d/%d: Reviewing %d files", batchNum, numBatches, len(batch))
+
+		result, err := r.reviewBatch(ctx, pr, batch)
+		if err != nil {
+			logrus.Errorf("❌ Batch %d/%d failed: %v (continuing with other batches)", batchNum, numBatches, err)
+			continue // Continue with other batches even if one fails
+		}
+
+		mu.Lock()
+		allComments = append(allComments, result.Comments...)
+		allSummaries = append(allSummaries, result.Summary...)
+		mu.Unlock()
+
+		logrus.Infof("✅ Batch %d/%d complete: %d comments", batchNum, numBatches, len(result.Comments))
+	}
+
+	// Deduplicate summaries (simple approach: keep unique ones)
+	uniqueSummaries := deduplicateSummaries(allSummaries)
+
+	logrus.Infof("🎯 Batching complete: %d total comments from %d batches", len(allComments), numBatches)
+
+	return &llm.ReviewResult{
+		Summary:  uniqueSummaries,
+		Comments: allComments,
+	}, nil
+}
+
+// deduplicateSummaries removes duplicate summary entries
+func deduplicateSummaries(summaries []string) []string {
+	seen := make(map[string]bool)
+	unique := make([]string, 0)
+
+	for _, s := range summaries {
+		if !seen[s] {
+			seen[s] = true
+			unique = append(unique, s)
+		}
+	}
+
+	return unique
 }
 
 func sortedKeys(m map[string][]llm.Comment) []string {

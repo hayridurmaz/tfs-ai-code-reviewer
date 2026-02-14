@@ -41,6 +41,9 @@ func (p *Publisher) PublishReview(ctx context.Context, repoID string, prID int, 
 
 	// 2) Spesifik yorumları (line-level) yayınla
 	for _, comment := range result.Comments {
+		// Normalize path to ensure consistency
+		normalizedPath := normalizePath(comment.Path)
+
 		text := fmt.Sprintf("**Severity:** %s\n\n%s", strings.ToUpper(comment.Severity), comment.Message)
 		if comment.Suggestion != "" {
 			text += fmt.Sprintf("\n\n```suggestion\n%s\n```", comment.Suggestion)
@@ -56,7 +59,7 @@ func (p *Publisher) PublishReview(ctx context.Context, repoID string, prID int, 
 			},
 			"status": "active",
 			"threadContext": map[string]interface{}{
-				"filePath": comment.Path,
+				"filePath": normalizedPath,
 				"rightFileStart": map[string]interface{}{
 					"line":   comment.Line,
 					"offset": 1,
@@ -66,19 +69,24 @@ func (p *Publisher) PublishReview(ctx context.Context, repoID string, prID int, 
 					"offset": 1,
 				},
 			},
-			"pullRequestThreadContext": map[string]interface{}{
-				"changeTrackingId": iterationID, // Iteration bazlı thread
-				"iterationContext": map[string]interface{}{
-					"firstComparingIteration":  iterationID,
-					"secondComparingIteration": iterationID,
-				},
-			},
+			// NOT using pullRequestThreadContext - it was causing comments to go to wrong files
+			// The changeTrackingId should be the file's change ID, not the iteration ID
+			// For simple file-level comments, threadContext alone is sufficient
 		}
 
 		if err := p.adoClient.PostThread(ctx, repoID, prID, iterationID, thread); err != nil {
-			return fmt.Errorf("failed to post comment thread for %s: %w", comment.Path, err)
+			return fmt.Errorf("failed to post comment thread for '%s' at line %d: %w", normalizedPath, comment.Line, err)
 		}
 	}
 
 	return nil
+}
+
+// normalizePath ensures consistent path formatting for ADO API
+// ADO expects paths to start with "/" for thread context
+func normalizePath(path string) string {
+	// Remove leading "/" if present, then add it back
+	// This ensures we always have exactly one leading "/"
+	path = strings.TrimPrefix(path, "/")
+	return "/" + path
 }

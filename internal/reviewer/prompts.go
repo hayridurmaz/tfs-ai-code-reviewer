@@ -37,7 +37,12 @@ KRİTİK KURALLAR:
    - **SADECE YENİ (DÜZELTİLMİŞ) KODU YAZ:** Düzeltilmesini/silinmesini istediğin eski kod parçalarını asla suggestion içinde bırakma. Suggestion sadece eski kodun yerini alacak olan final halini içermelidir.
    - Değişken kapsamlarını (variable scopes), import gereksinimlerini ve dilin spesifik kurallarını dikkate al.
    - Kod dışında bir açıklama yazman gerekiyorsa, bunu mutlaka kod içerisinde ilgili dilin yorum satırı (comment out) formatıyla yap. Suggestion alanı direkt kopyalanabilir ve derlenebilir olmalıdır.
-6. **Türkçe:** Yanıtların profesyonel, yapıcı ve Türkçe olsun.`
+6. **Türkçe:** Yanıtların profesyonel, yapıcı ve Türkçe olsun.
+7. **TÜM DOSYALARI İNCELE:** Sana verilen diff'te yer alan HER DOSYAYI mutlaka değerlendir. Bir dosyada ciddi sorun yoksa yorum yapmayabilirsin, ama tüm dosyaları gözden geçirdiğinden emin ol.
+8. **DOĞRU PATH VE SATIR NUMARASI:**
+   - 'path' alanında, diff başlığında gösterilen dosya yolunu AYNEN kullan (örn: "## src/components/Login.js" ise path: "src/components/Login.js" olmalı).
+   - 'line' alanı, YENİ dosyadaki (değişiklik sonrası) MUTLAK satır numarasını göstermelidir. Diff satır numarası değil, dosyanın gerçek satır numarası olmalı.
+   - Path'lerde ekstra '/' ekleme veya çıkarma, tam olarak diff'te göründüğü gibi yaz.`
 
 type FileDiff struct {
 	Path       string

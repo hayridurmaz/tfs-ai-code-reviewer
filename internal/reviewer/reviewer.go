@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/gobwas/glob"
@@ -107,6 +108,45 @@ func (r *Reviewer) prepareFileContext(ctx context.Context, repoID string, change
 	}, nil
 }
 
+// validateAndFilterComments ensures all comments reference valid files from the PR
+func (r *Reviewer) validateAndFilterComments(comments []llm.Comment, fileDiffs []FileDiff) []llm.Comment {
+	// Build a map of valid file paths for quick lookup
+	// Normalize paths by removing leading "/" to handle inconsistent formatting
+	validPaths := make(map[string]bool)
+	for _, fd := range fileDiffs {
+		normalizedPath := strings.TrimPrefix(fd.Path, "/")
+		validPaths[normalizedPath] = true
+		// Also add the original path in case it doesn't have a leading "/"
+		validPaths[fd.Path] = true
+	}
+
+	validComments := make([]llm.Comment, 0, len(comments))
+	for _, c := range comments {
+		// Normalize the comment path for comparison
+		normalizedCommentPath := strings.TrimPrefix(c.Path, "/")
+
+		// Check if path is valid (try both normalized and original)
+		if !validPaths[c.Path] && !validPaths[normalizedCommentPath] {
+			logrus.Warnf("⚠️  Invalid comment path from LLM: '%s' (not in changed files). Skipping comment.", c.Path)
+			continue
+		}
+
+		// Check if line number is reasonable
+		if c.Line <= 0 {
+			logrus.Warnf("⚠️  Invalid line number %d for file '%s'. Skipping comment.", c.Line, c.Path)
+			continue
+		}
+
+		validComments = append(validComments, c)
+	}
+
+	if len(comments) > len(validComments) {
+		logrus.Warnf("Filtered out %d invalid comments (wrong paths or line numbers)", len(comments)-len(validComments))
+	}
+
+	return validComments
+}
+
 func (r *Reviewer) ReviewPR(ctx context.Context, repoID string, pr ado.PullRequest, changes []ado.Change) (*llm.ReviewResult, error) {
 	var fileDiffs []FileDiff
 	var mu sync.Mutex
@@ -151,6 +191,9 @@ func (r *Reviewer) ReviewPR(ctx context.Context, repoID string, pr ado.PullReque
 	if err != nil {
 		return nil, err
 	}
+
+	// Validate comments against actual changed files
+	result.Comments = r.validateAndFilterComments(result.Comments, fileDiffs)
 
 	// Filter comments by confidence
 	filteredComments := make([]llm.Comment, 0)

@@ -46,6 +46,10 @@ func (c *Client) ReviewCode(ctx context.Context, systemPrompt, userPrompt string
 	var resp openai.ChatCompletionResponse
 	var err error
 
+	promptTokenEstimate := len(systemPrompt)/4 + len(userPrompt)/4 // Rough estimate: ~4 chars per token
+	logrus.Debugf("🤖 Sending request to LLM (model: %s, estimated prompt tokens: ~%d)", c.model, promptTokenEstimate)
+	startTime := time.Now()
+
 	for i := 0; i <= c.maxRetries; i++ {
 		resp, err = c.client.CreateChatCompletion(
 			ctx,
@@ -87,8 +91,18 @@ func (c *Client) ReviewCode(ctx context.Context, systemPrompt, userPrompt string
 		return nil, fmt.Errorf("LLM request failed after %d retries: %w", c.maxRetries, err)
 	}
 
+	elapsed := time.Since(startTime)
+
 	if len(resp.Choices) == 0 {
 		return nil, fmt.Errorf("LLM returned no choices")
+	}
+
+	// Log token usage and response time
+	if resp.Usage.TotalTokens > 0 {
+		logrus.Debugf("✅ LLM response received in %v (prompt: %d, completion: %d, total: %d tokens)",
+			elapsed.Round(time.Millisecond), resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.TotalTokens)
+	} else {
+		logrus.Debugf("✅ LLM response received in %v", elapsed.Round(time.Millisecond))
 	}
 
 	content := resp.Choices[0].Message.Content

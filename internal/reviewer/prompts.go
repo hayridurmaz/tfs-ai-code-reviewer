@@ -88,6 +88,7 @@ YORUM YAPMA / YAPMAMA KRİTERLERİ
    • Emin olmadığın veya spekülasyon gerektiren durumlar
    • **OLUMLU YORUMLAR:** "Güzel kod", "Doğru kullanım", "Refactoring başarılı" gibi şeyler söyleme. Sadece sorunları bul.
    • **DURUM TESPİTİ:** "Burada X yerine Y kullanılmış" gibi zaten diff'te görünen şeyi anlatma. Sadece neden yanlış olduğunu söyle.
+   • **DOSYADA ZATEN VARSA:** Önermek istediğin pattern (null check, validation, error handling vb.) dosyanın başka bir yerinde zaten varsa yorum YAPMA. "Tam Dosya İçeriği" bölümünü MUTLAKA kontrol et.
 
 ═══════════════════════════════════════════════════════════════════
 KRİTİK KURALLAR
@@ -124,6 +125,11 @@ KRİTİK KURALLAR
    - **ÇOK KISA VE NET OL:** Makale yazma. Direkt konuya gir.
    - Gereksiz bağlaçları ve "bence", "sanırım" gibi kelimeleri at.
    - Mümkünse tek cümle, en fazla iki cümle kur.
+
+11. **ÖNERİ VERMEDEN ÖNCE KONTROL ET:**
+    - Bir şey önermeden önce (null check, validation, try-catch, vb.) "Tam Dosya İçeriği" bölümünde aynı pattern'in zaten var olup olmadığını ARA.
+    - Eğer benzer bir kontrol/pattern dosyanın başka bir yerinde zaten yapılıyorsa, YORUM YAPMA.
+    - Örnek: "Null check ekleyin" demeden önce, dosyada zaten null check var mı kontrol et.
 
 ═══════════════════════════════════════════════════════════════════
 ÖRNEKLER
@@ -229,8 +235,10 @@ func BuildUserPrompt(prTitle, prDescription string, fileDiffs []FileDiff) string
 		builder.WriteString("\n```\n\n")
 
 		if f.Content != "" {
-			builder.WriteString("### Tam Dosya İçeriği (Satır Numaralı)\n")
-			builder.WriteString("Bu bölümü satır numaralarını doğru tespit etmek için kullan:\n\n```\n")
+			builder.WriteString("### Tam Dosya İçeriği (Satır Numaralı) - ÖNERİ VERMEDEN ÖNCE KONTROL ET!\n")
+			builder.WriteString("Bu bölümü iki amaçla kullan:\n")
+			builder.WriteString("1. Satır numaralarını doğru tespit etmek için\n")
+			builder.WriteString("2. **ÖNEMLİ:** Önereceğin pattern (null check, validation, error handling) dosyada zaten var mı kontrol et. Varsa öneri YAPMA!\n\n```\n")
 
 			lines := strings.Split(f.Content, "\n")
 			for i, line := range lines {

@@ -149,7 +149,7 @@ func (r *Reviewer) validateAndFilterComments(comments []llm.Comment, fileDiffs [
 	return validComments
 }
 
-func (r *Reviewer) ReviewPR(ctx context.Context, repoID string, pr ado.PullRequest, changes []ado.Change) (*llm.ReviewResult, error) {
+func (r *Reviewer) ReviewPR(ctx context.Context, repoID string, pr ado.PullRequest, changes []ado.Change, isFirstReview bool) (*llm.ReviewResult, error) {
 	var fileDiffs []FileDiff
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -190,17 +190,17 @@ func (r *Reviewer) ReviewPR(ctx context.Context, repoID string, pr ado.PullReque
 	batchSize := r.cfg.Bot.MaxFilesPerBatch
 	if batchSize <= 0 || len(fileDiffs) <= batchSize {
 		// No batching needed - review all files in one request
-		logrus.Infof("Reviewing %d files in single request (no batching)", len(fileDiffs))
-		return r.reviewBatch(ctx, pr, fileDiffs)
+		logrus.Debugf("Reviewing %d files in single request (no batching)", len(fileDiffs))
+		return r.reviewBatch(ctx, pr, fileDiffs, isFirstReview)
 	}
 
 	// Use batching for large PRs
-	logrus.Infof("Reviewing %d files in batches of %d", len(fileDiffs), batchSize)
-	return r.reviewInBatches(ctx, pr, fileDiffs, batchSize)
+	logrus.Debugf("Reviewing %d files in batches of %d", len(fileDiffs), batchSize)
+	return r.reviewInBatches(ctx, pr, fileDiffs, batchSize, isFirstReview)
 }
 
 // reviewBatch reviews a single batch of files
-func (r *Reviewer) reviewBatch(ctx context.Context, pr ado.PullRequest, fileDiffs []FileDiff) (*llm.ReviewResult, error) {
+func (r *Reviewer) reviewBatch(ctx context.Context, pr ado.PullRequest, fileDiffs []FileDiff, isFirstReview bool) (*llm.ReviewResult, error) {
 	userPrompt := BuildUserPrompt(pr.Title, pr.Description, fileDiffs)
 
 	// 1. AŞAMA: Draft Review
@@ -211,7 +211,7 @@ func (r *Reviewer) reviewBatch(ctx context.Context, pr ado.PullRequest, fileDiff
 
 	// 2. AŞAMA: Self-Correction (Opsiyonel)
 	if r.cfg.Bot.EnableSelfCorrection {
-		logrus.Infof("🧠 Applying Self-Correction (2-Stage Verification)...")
+		logrus.Debugf("🧠 Applying Self-Correction (2-Stage Verification)...")
 
 		// Taslak sonucu JSON'a çevir
 		draftJSON, _ := json.MarshalIndent(result, "", "  ") // Error ignored, safe for simple struct
@@ -224,7 +224,7 @@ func (r *Reviewer) reviewBatch(ctx context.Context, pr ado.PullRequest, fileDiff
 		if err == nil {
 			// Eğer başarılıysa, sonucu güncelle
 			countDiff := len(result.Comments) - len(correctedResult.Comments)
-			logrus.Infof("✅ Self-Correction complete. Filtered %d comments. Final count: %d", countDiff, len(correctedResult.Comments))
+			logrus.Debugf("✅ Self-Correction complete. Filtered %d comments. Final count: %d", countDiff, len(correctedResult.Comments))
 			result = correctedResult
 		} else {
 			logrus.Warnf("⚠️ Self-Correction failed: %v. Using original draft.", err)
@@ -247,19 +247,24 @@ func (r *Reviewer) reviewBatch(ctx context.Context, pr ado.PullRequest, fileDiff
 		}
 	}
 
-	// Group by file and limit comments per file
-	grouped := make(map[string][]llm.Comment)
-	for _, c := range filteredComments {
-		grouped[c.Path] = append(grouped[c.Path], c)
+	// Sort comments by confidence (highest first)
+	sortedComments := sortCommentsByConfidence(filteredComments)
+
+	// Determine the comment limit based on review type
+	commentLimit := r.cfg.Bot.MaxCommentsPerFile
+	if isFirstReview {
+		commentLimit = r.cfg.Bot.MaxCommentsPerFileFirstReview
+		logrus.Debugf("Using first review comment limit: %d total comments for PR", commentLimit)
+	} else {
+		commentLimit = r.cfg.Bot.MaxCommentsPerFileIteration
+		logrus.Debugf("Using iteration comment limit: %d total comments for PR", commentLimit)
 	}
 
-	finalComments := make([]llm.Comment, 0)
-	for _, path := range sortedKeys(grouped) {
-		comments := grouped[path]
-		if len(comments) > r.cfg.Bot.MaxCommentsPerFile {
-			comments = comments[:r.cfg.Bot.MaxCommentsPerFile]
-		}
-		finalComments = append(finalComments, comments...)
+	// Limit total comments for the entire PR (keeping highest priority comments)
+	finalComments := sortedComments
+	if len(finalComments) > commentLimit {
+		finalComments = finalComments[:commentLimit]
+		logrus.Debugf("Truncated comments from %d to %d (PR limit), keeping highest priority comments", len(sortedComments), commentLimit)
 	}
 
 	result.Comments = finalComments
@@ -293,7 +298,7 @@ func (r *Reviewer) cleanSuggestion(suggestion string) string {
 }
 
 // reviewInBatches splits files into batches and reviews each separately
-func (r *Reviewer) reviewInBatches(ctx context.Context, pr ado.PullRequest, fileDiffs []FileDiff, batchSize int) (*llm.ReviewResult, error) {
+func (r *Reviewer) reviewInBatches(ctx context.Context, pr ado.PullRequest, fileDiffs []FileDiff, batchSize int, isFirstReview bool) (*llm.ReviewResult, error) {
 	var allComments []llm.Comment
 	var allSummaries []string
 	var mu sync.Mutex
@@ -309,9 +314,9 @@ func (r *Reviewer) reviewInBatches(ctx context.Context, pr ado.PullRequest, file
 		batch := fileDiffs[i:end]
 		batchNum := i/batchSize + 1
 
-		logrus.Infof("📦 Batch %d/%d: Reviewing %d files", batchNum, numBatches, len(batch))
+		logrus.Debugf("📦 Batch %d/%d: Reviewing %d files", batchNum, numBatches, len(batch))
 
-		result, err := r.reviewBatch(ctx, pr, batch)
+		result, err := r.reviewBatch(ctx, pr, batch, isFirstReview)
 		if err != nil {
 			logrus.Errorf("❌ Batch %d/%d failed: %v (continuing with other batches)", batchNum, numBatches, err)
 			continue // Continue with other batches even if one fails
@@ -322,13 +327,13 @@ func (r *Reviewer) reviewInBatches(ctx context.Context, pr ado.PullRequest, file
 		allSummaries = append(allSummaries, result.Summary...)
 		mu.Unlock()
 
-		logrus.Infof("✅ Batch %d/%d complete: %d comments", batchNum, numBatches, len(result.Comments))
+		logrus.Debugf("✅ Batch %d/%d complete: %d comments", batchNum, numBatches, len(result.Comments))
 	}
 
 	// Deduplicate summaries (simple approach: keep unique ones)
 	uniqueSummaries := deduplicateSummaries(allSummaries)
 
-	logrus.Infof("🎯 Batching complete: %d total comments from %d batches", len(allComments), numBatches)
+	logrus.Debugf("🎯 Batching complete: %d total comments from %d batches", len(allComments), numBatches)
 
 	return &llm.ReviewResult{
 		Summary:  uniqueSummaries,
@@ -358,4 +363,22 @@ func sortedKeys(m map[string][]llm.Comment) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// sortCommentsByConfidence sorts comments by confidence level (highest first)
+func sortCommentsByConfidence(comments []llm.Comment) []llm.Comment {
+	sorted := make([]llm.Comment, len(comments))
+	copy(sorted, comments)
+
+	sort.Slice(sorted, func(i, j int) bool {
+		// Sort by confidence (higher first)
+		if sorted[i].Confidence != sorted[j].Confidence {
+			return sorted[i].Confidence > sorted[j].Confidence
+		}
+
+		// If confidence is the same, sort by path
+		return sorted[i].Path < sorted[j].Path
+	})
+
+	return sorted
 }

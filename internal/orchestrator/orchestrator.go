@@ -34,7 +34,7 @@ func NewOrchestrator(cfg *config.Config, store *state.Store, adoClient *ado.Clie
 }
 
 func (o *Orchestrator) PollOnce(ctx context.Context) {
-	logrus.Info("🔄 Polling started...")
+	logrus.Debug("🔄 Polling started...")
 
 	repos, err := o.adoClient.GetRepositories(ctx)
 	if err != nil {
@@ -70,7 +70,7 @@ func (o *Orchestrator) PollOnce(ctx context.Context) {
 }
 
 func (o *Orchestrator) processRepo(ctx context.Context, repo ado.Repository, semaphore chan struct{}) {
-	logrus.Infof("📂 Repo: %s (%s)", repo.Name, repo.ID)
+	logrus.Debugf("📂 Repo: %s (%s)", repo.Name, repo.ID)
 
 	prs, err := o.adoClient.GetActivePullRequests(ctx, repo.ID)
 	if err != nil {
@@ -113,8 +113,9 @@ func (o *Orchestrator) processRepo(ctx context.Context, repo ado.Repository, sem
 		}
 		prs = filtered
 	}
-
-	logrus.Infof("  └─ %s: %d active PRs found", repo.Name, len(prs))
+	if len(prs) > 0 {
+		logrus.Debugf("  └─ %s: %d active PRs found", repo.Name, len(prs))
+	}
 
 	for _, pr := range prs {
 		semaphore <- struct{}{} // Acquire semaphore
@@ -161,9 +162,9 @@ func (o *Orchestrator) processPR(ctx context.Context, repo ado.Repository, pr ad
 	if len(iterations) > 1 {
 		prev := iterations[len(iterations)-2].ID
 		compareTo = &prev
-		logrus.Infof("  ℹ️ Incremental Review: Iteration %d -> %d", *compareTo, latestIteration.ID)
+		logrus.Debugf("  ℹ️ Incremental Review: Iteration %d -> %d", *compareTo, latestIteration.ID)
 	} else {
-		logrus.Infof("  ℹ️ First Review: Iteration %d", latestIteration.ID)
+		logrus.Debugf("  ℹ️ First Review: Iteration %d", latestIteration.ID)
 	}
 
 	changes, err := o.adoClient.GetIterationChanges(ctx, repo.ID, pr.PullRequestId, latestIteration.ID, compareTo)

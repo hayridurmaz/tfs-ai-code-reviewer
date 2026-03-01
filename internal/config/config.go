@@ -5,6 +5,7 @@ import (
 
 	"github.com/caarlos0/env/v10"
 	"github.com/joho/godotenv"
+	"github.com/sirupsen/logrus"
 )
 
 type Config struct {
@@ -52,6 +53,19 @@ func Load() (*Config, error) {
 	// Clean up branch names if they have refs/heads/ prefix
 	for i, branch := range cfg.ADO.TargetBranches {
 		cfg.ADO.TargetBranches[i] = strings.TrimPrefix(branch, "refs/heads/")
+	}
+
+	// Log loaded configuration (excluding sensitive data)
+	logrus.Debugf("📋 Config loaded: Project=%s, Model=%s, PollInterval=%ds, MaxConcurrentPRs=%d, DryRun=%v",
+		cfg.ADO.ProjectName, cfg.LLM.Model, cfg.Bot.PollIntervalSec, cfg.Bot.MaxConcurrentPRs, cfg.Bot.DryRun)
+	if len(cfg.ADO.Repos) > 0 {
+		logrus.Debugf("📋 Filtering repos: %v", cfg.ADO.Repos)
+	}
+	if len(cfg.ADO.TargetBranches) > 0 {
+		logrus.Debugf("📋 Target branches: %v", cfg.ADO.TargetBranches)
+	}
+	if len(cfg.IgnorePatterns) > 0 {
+		logrus.Debugf("📋 Ignore patterns: %v", cfg.IgnorePatterns)
 	}
 
 	return cfg, nil

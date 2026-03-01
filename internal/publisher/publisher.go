@@ -7,6 +7,7 @@ import (
 
 	"github.com/hayridurmaz/tfs-ai-code-reviewer/internal/ado"
 	"github.com/hayridurmaz/tfs-ai-code-reviewer/internal/llm"
+	"github.com/sirupsen/logrus"
 )
 
 type Publisher struct {
@@ -18,6 +19,9 @@ func NewPublisher(adoClient *ado.Client) *Publisher {
 }
 
 func (p *Publisher) PublishReview(ctx context.Context, repoID string, prID int, iterationID int, result *llm.ReviewResult) error {
+	logrus.Debugf("📤 Publishing review for PR #%d (iteration %d): %d summary items, %d comments",
+		prID, iterationID, len(result.Summary), len(result.Comments))
+
 	// 1) Summary thread'i oluştur
 	summaryText := "### 🤖 AI Code Review Özeti\n\n"
 	for _, s := range result.Summary {
@@ -38,6 +42,7 @@ func (p *Publisher) PublishReview(ctx context.Context, repoID string, prID int, 
 	if err := p.adoClient.PostThread(ctx, repoID, prID, iterationID, summaryThread); err != nil {
 		return fmt.Errorf("failed to post summary thread: %w", err)
 	}
+	logrus.Debugf("📝 Summary thread posted for PR #%d", prID)
 
 	// 2) Spesifik yorumları (line-level) yayınla
 	for _, comment := range result.Comments {
@@ -77,8 +82,10 @@ func (p *Publisher) PublishReview(ctx context.Context, repoID string, prID int, 
 		if err := p.adoClient.PostThread(ctx, repoID, prID, iterationID, thread); err != nil {
 			return fmt.Errorf("failed to post comment thread for '%s' at line %d: %w", normalizedPath, comment.Line, err)
 		}
+		logrus.Debugf("💬 Comment posted: %s:%d [%s]", normalizedPath, comment.Line, comment.Severity)
 	}
 
+	logrus.Infof("📤 Published %d comments to PR #%d", len(result.Comments), prID)
 	return nil
 }
 

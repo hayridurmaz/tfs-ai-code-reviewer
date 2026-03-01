@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/sirupsen/logrus"
 	_ "modernc.org/sqlite"
 )
 
@@ -26,6 +27,7 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, err
 	}
 
+	logrus.Infof("🗄️  Database connected: %s", dbPath)
 	return s, nil
 }
 
@@ -62,9 +64,11 @@ func (s *Store) MarkIterationReviewed(repoID string, prID int, iterationID int, 
 	if err != nil {
 		return fmt.Errorf("failed to mark iteration reviewed: %w", err)
 	}
+	logrus.Debugf("💾 Marked PR #%d iteration %d as reviewed in database", prID, iterationID)
 	return nil
 }
 
 func (s *Store) Close() error {
+	logrus.Debug("🗄️  Closing database connection")
 	return s.db.Close()
 }

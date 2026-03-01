@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 type Client struct {
@@ -19,6 +21,7 @@ type Client struct {
 }
 
 func NewClient(baseURL, project, pat string, timeoutSec int) *Client {
+	logrus.Debugf("🔗 ADO client initialized: %s/%s (timeout: %ds)", baseURL, project, timeoutSec)
 	return &Client{
 		baseURL: strings.TrimSuffix(baseURL, "/"),
 		project: project,
@@ -56,6 +59,10 @@ func (c *Client) doRequest(ctx context.Context, url string, result interface{}) 
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		// Log rate limit warnings
+		if resp.StatusCode == http.StatusTooManyRequests {
+			logrus.Warnf("⚠️  ADO API rate limit hit (429). Consider increasing poll interval.")
+		}
 		return fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
 	}
 

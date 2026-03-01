@@ -66,7 +66,7 @@ func main() {
 			return
 		default:
 			orc.PollOnce(ctx)
-			logrus.Infof("✅ Polling completed. Waiting %ds...", cfg.Bot.PollIntervalSec)
+			logrus.Debugf("✅ Polling completed. Waiting %ds...", cfg.Bot.PollIntervalSec)
 
 			select {
 			case <-time.After(time.Duration(cfg.Bot.PollIntervalSec) * time.Second):

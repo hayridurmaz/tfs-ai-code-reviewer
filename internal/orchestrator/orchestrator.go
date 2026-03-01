@@ -157,10 +157,13 @@ func (o *Orchestrator) processPR(ctx context.Context, repo ado.Repository, pr ad
 	logrus.Infof("🔍 PR #%d - iteration %d is being reviewed...", pr.PullRequestId, latestIteration.ID)
 
 	var compareTo *int
+	isFirstReview := len(iterations) == 1
 	if len(iterations) > 1 {
 		prev := iterations[len(iterations)-2].ID
 		compareTo = &prev
 		logrus.Infof("  ℹ️ Incremental Review: Iteration %d -> %d", *compareTo, latestIteration.ID)
+	} else {
+		logrus.Infof("  ℹ️ First Review: Iteration %d", latestIteration.ID)
 	}
 
 	changes, err := o.adoClient.GetIterationChanges(ctx, repo.ID, pr.PullRequestId, latestIteration.ID, compareTo)
@@ -169,7 +172,7 @@ func (o *Orchestrator) processPR(ctx context.Context, repo ado.Repository, pr ad
 		return
 	}
 
-	result, err := o.rev.ReviewPR(ctx, repo.ID, pr, changes)
+	result, err := o.rev.ReviewPR(ctx, repo.ID, pr, changes, isFirstReview)
 	if err != nil {
 		logrus.Errorf("Review failed for PR #%d: %v", pr.PullRequestId, err)
 		return
